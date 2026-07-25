@@ -71,8 +71,11 @@ export function buildSystemPrompt(config: FilterConfig): string {
     'You will be given one or more numbered posts. Return a JSON object of the form',
     '{"results": [{"index": <post number>, "hide": <boolean>, "reason": <string>}, ...]}',
     'with exactly one entry per post, matching each post\'s number.',
-    'Always fill "reason" with one short sentence: when hiding, name the matched',
-    'criterion; when keeping, say why the post relates to none of the criteria.',
+    'Always fill "reason" with one short, concrete sentence about the post itself.',
+    '- When hiding: name the matched criterion and how the post relates to it.',
+    '- When keeping: briefly state what the post is actually about (topic or gist).',
+    '- Never write meta reasons like "does not match", "none of the criteria",',
+    '  "unrelated to the filters", or similar. Always describe the post content.',
   ].join('\n');
 }
 
