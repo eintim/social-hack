@@ -102,9 +102,17 @@ export interface PlatformAdapter {
   clearAnnotations(root: ParentNode): void;
   /**
    * Stamp a post with its engagement rate. `ratePct` is (likes+replies+reposts)/views×100;
-   * `high` switches to the Hot styling when at/above the user threshold.
+   * `high` switches to the Hot styling when at/above the user threshold. `standout`
+   * names the metric (likes/replies/reposts) that is disproportionately high for
+   * this post, so the hover readout can highlight it — or null when none stands out.
    */
-  annotateEngagement(node: HTMLElement, ratePct: number, high: boolean, detail: string): void;
+  annotateEngagement(
+    node: HTMLElement,
+    ratePct: number,
+    high: boolean,
+    detail: string,
+    standout?: 'likes' | 'replies' | 'reposts' | null,
+  ): void;
   /** Remove all engagement-rate badges from a DOM subtree. */
   clearEngagement(root: ParentNode): void;
 }

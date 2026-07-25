@@ -14,6 +14,32 @@ function engagementRate(m: PostMetrics): number | null {
   return ((m.likes + m.replies + m.reposts) / m.views) * 100;
 }
 
+/** Typical share each metric takes of a healthy post's total engagement. */
+const ENGAGEMENT_MIX = { likes: 0.6, reposts: 0.22, replies: 0.18 } as const;
+type EngagementKey = keyof typeof ENGAGEMENT_MIX;
+
+/**
+ * Which of likes/replies/reposts is disproportionately high for this post — the
+ * metric whose share of total engagement most exceeds the typical mix — or null
+ * when nothing stands out. Comparing *shares* (not raw counts) is what makes it
+ * useful: raw likes almost always dominate, so this instead surfaces a ratio'd
+ * post (replies), a viral one (reposts), or a discussion-free one (pure likes).
+ */
+function standoutMetric(m: PostMetrics): EngagementKey | null {
+  const total = m.likes + m.replies + m.reposts;
+  if (total < 10) return null; // too little engagement to read anything into
+  let best: EngagementKey | null = null;
+  let bestRatio = 1.5; // require ≥1.5× the metric's typical share to flag
+  for (const key of ['likes', 'replies', 'reposts'] as EngagementKey[]) {
+    const ratio = m[key] / total / ENGAGEMENT_MIX[key];
+    if (ratio >= bestRatio) {
+      bestRatio = ratio;
+      best = key;
+    }
+  }
+  return best;
+}
+
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
@@ -91,7 +117,8 @@ export function startEngine() {
       return;
     }
     const threshold = config.engagementHighPct;
-    const key = `${metricsKey(metrics)}@${threshold}`;
+    const standout = standoutMetric(metrics);
+    const key = `${metricsKey(metrics)}@${threshold}#${standout ?? ''}`;
     const existing = node.querySelector('[data-xff-er]');
     if (erApplied.get(node) === key && existing) return;
     erApplied.set(node, key);
@@ -101,7 +128,7 @@ export function startEngine() {
       `${formatCount(metrics.reposts)} reposts · ${formatCount(metrics.views)} views` +
       ` → ${rate.toFixed(2)}%` +
       (high ? ` (hot ≥ ${threshold}%)` : '');
-    adapter!.annotateEngagement(node, rate, high, detail);
+    adapter!.annotateEngagement(node, rate, high, detail, standout);
   };
 
   // Threads that have been hidden, remembered per-node so late-loading siblings

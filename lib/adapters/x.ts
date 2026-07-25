@@ -259,6 +259,7 @@ function showTip(badge: HTMLElement, text: string) {
   // ER tips use " · " separators — render as a stacked readout.
   if (badge.hasAttribute(ER_ATTR) && text.includes(' · ')) {
     el.replaceChildren();
+    const standout = badge.dataset.xffErStandout || '';
     const lines = text.split(' → ');
     const counts = (lines[0] ?? '').split(' · ');
     const grid = document.createElement('div');
@@ -267,13 +268,17 @@ function showTip(badge: HTMLElement, text: string) {
     for (const part of counts) {
       const m = part.trim().match(/^(\S+)\s+(.+)$/);
       if (!m) continue;
+      // The disproportionately-high metric (e.g. a ratio'd reply count) is
+      // painted in the signal accent so it reads at a glance.
+      const hot = standout !== '' && m[2] === standout;
       const n = document.createElement('span');
-      n.textContent = m[1];
-      n.style.fontWeight = '700';
-      n.style.color = 'rgb(231,233,234)';
+      n.textContent = hot ? `${m[1]} ▲` : m[1];
+      n.style.fontWeight = hot ? '800' : '700';
+      n.style.color = hot ? ER_SIGNAL : 'rgb(231,233,234)';
       const l = document.createElement('span');
       l.textContent = m[2];
-      l.style.color = 'rgb(113,118,123)';
+      l.style.color = hot ? ER_SIGNAL : 'rgb(113,118,123)';
+      l.style.fontWeight = hot ? '700' : '400';
       grid.append(n, l);
     }
     el.appendChild(grid);
@@ -608,7 +613,7 @@ export const xAdapter: PlatformAdapter = {
     hideTip();
   },
 
-  annotateEngagement(node, ratePct, high, detail) {
+  annotateEngagement(node, ratePct, high, detail, standout) {
     let badge = node.querySelector<HTMLElement>(`[${ER_ATTR}]`);
     const isNew = !badge;
     if (!badge) {
@@ -623,6 +628,7 @@ export const xAdapter: PlatformAdapter = {
       badge.addEventListener('mouseleave', hideTip);
     }
 
+    badge.dataset.xffErStandout = standout ?? '';
     paintErBadge(badge, ratePct, high, detail);
     // Re-trigger enter animation only when the chip is first mounted or flips Hot.
     if (!isNew && high && badge.dataset.xffErAnimated !== 'hot') {
