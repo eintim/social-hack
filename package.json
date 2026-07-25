@@ -13,6 +13,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "tsc --noEmit",
+    "pitch": "npx -y serve docs/pitch",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
