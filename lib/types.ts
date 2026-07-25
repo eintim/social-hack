@@ -42,6 +42,12 @@ export interface PlatformAdapter {
   name: string;
   /** Find candidate post nodes within a DOM subtree. */
   findPosts(root: ParentNode): HTMLElement[];
+  /**
+   * Return every post node belonging to the same thread as `node` (including
+   * `node` itself), in document order. For a standalone post this is just
+   * `[node]`. Used so hiding one post in a thread hides the whole thread.
+   */
+  findThread(node: HTMLElement): HTMLElement[];
   /** Pull author + text out of a post node (null if it isn't a usable post). */
   extractPost(node: HTMLElement): PostData | null;
   /** Collapse a matched post into a thin placeholder with a reason + reveal. */

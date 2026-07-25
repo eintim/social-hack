@@ -55,11 +55,52 @@ function extractId(node: HTMLElement): string {
   return m ? m[1] : '';
 }
 
+const CELL_SELECTOR = '[data-testid="cellInnerDiv"]';
+
+/** The timeline cell wrapping a post node (or the node itself if none). */
+function cellOf(node: HTMLElement): HTMLElement {
+  return (node.closest<HTMLElement>(CELL_SELECTOR)) ?? node;
+}
+
+/** Lowercased @handle of the post in a node, or '' if none found. */
+function handleOf(node: HTMLElement): string {
+  const userName = node.querySelector('[data-testid="User-Name"]');
+  const m = userName?.textContent?.match(/@(\w{1,15})/);
+  return m ? m[1].toLowerCase() : '';
+}
+
+const articleIn = (cell: HTMLElement): HTMLElement | null =>
+  cell.querySelector<HTMLElement>('article[data-testid="tweet"]');
+
 export const xAdapter: PlatformAdapter = {
   name: 'x',
 
   findPosts(root) {
     return Array.from(root.querySelectorAll<HTMLElement>('article[data-testid="tweet"]'));
+  },
+
+  findThread(node) {
+    // X renders a self-thread as consecutive timeline cells authored by the
+    // same account. Walk siblings both ways collecting that same-author run.
+    const cell = cellOf(node);
+    const author = handleOf(node);
+    if (!author || !cell.matches(CELL_SELECTOR)) return [node];
+
+    const cells: HTMLElement[] = [cell];
+    const sameAuthorArticle = (sib: Element | null): HTMLElement | null => {
+      if (!(sib instanceof HTMLElement) || !sib.matches(CELL_SELECTOR)) return null;
+      const art = articleIn(sib);
+      return art && handleOf(art) === author ? art : null;
+    };
+
+    for (let p = cell.previousElementSibling; sameAuthorArticle(p); p = p!.previousElementSibling) {
+      cells.unshift(p as HTMLElement);
+    }
+    for (let n = cell.nextElementSibling; sameAuthorArticle(n); n = n!.nextElementSibling) {
+      cells.push(n as HTMLElement);
+    }
+
+    return cells.map(articleIn).filter((a): a is HTMLElement => a !== null);
   },
 
   extractPost(node) {
