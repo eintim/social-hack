@@ -1,12 +1,25 @@
 import { useEffect, useState } from 'react';
-import { filterConfig } from '@/lib/storage';
+import { filterConfig, DEFAULT_CONFIG } from '@/lib/storage';
 import { CATEGORIES } from '@/lib/categories';
-import type { FilterConfig } from '@/lib/types';
+import type { FilterConfig, Provider } from '@/lib/types';
 import './App.css';
 
 type ModelState = 'checking' | 'unsupported' | 'unavailable' | 'downloadable' | 'downloading' | 'ready';
+type ApiTestState = 'idle' | 'testing' | 'ok' | 'error';
 
 const EXPECTED = [{ type: 'text' as const, languages: ['en'] }];
+
+/** Fill in provider fields missing from older stored configs. */
+function withDefaults(c: FilterConfig): FilterConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    ...c,
+    provider: c.provider ?? DEFAULT_CONFIG.provider,
+    apiBaseUrl: c.apiBaseUrl ?? DEFAULT_CONFIG.apiBaseUrl,
+    apiKey: c.apiKey ?? DEFAULT_CONFIG.apiKey,
+    apiModel: c.apiModel ?? DEFAULT_CONFIG.apiModel,
+  };
+}
 
 function normalizeAvailability(value: string): ModelState {
   if (value === 'available' || value === 'readily') return 'ready';
@@ -15,15 +28,30 @@ function normalizeAvailability(value: string): ModelState {
   return 'unavailable';
 }
 
+/** Ask Chrome for host access to an OpenAI-compatible base URL. */
+async function ensureHostPermission(baseUrl: string): Promise<boolean> {
+  try {
+    const origin = new URL(baseUrl).origin;
+    const origins = [`${origin}/*`];
+    const already = await browser.permissions.contains({ origins });
+    if (already) return true;
+    return await browser.permissions.request({ origins });
+  } catch {
+    return false;
+  }
+}
+
 function App() {
   const [config, setConfig] = useState<FilterConfig | null>(null);
   const [model, setModel] = useState<ModelState>('checking');
   const [progress, setProgress] = useState<number | null>(null);
   const [newRule, setNewRule] = useState('');
   const [newAuthor, setNewAuthor] = useState('');
+  const [apiTest, setApiTest] = useState<ApiTestState>('idle');
+  const [apiError, setApiError] = useState('');
 
   useEffect(() => {
-    filterConfig.getValue().then(setConfig);
+    filterConfig.getValue().then((c) => setConfig(withDefaults(c)));
     checkModel();
     // Poll so the indicator updates live (downloadable → downloading → ready)
     // even when the download was triggered outside the popup.
@@ -76,6 +104,87 @@ function App() {
     filterConfig.setValue(next);
   }
 
+  async function setProvider(provider: Provider) {
+    update({ provider });
+    setApiTest('idle');
+    setApiError('');
+  }
+
+  async function setApiBaseUrl(apiBaseUrl: string) {
+    if (!config) return;
+    const next = { ...config, apiBaseUrl };
+    setConfig(next);
+    // Persist immediately so typing isn't lost, but request host permission
+    // once the URL looks like a real origin (on blur / via test).
+    filterConfig.setValue(next);
+    setApiTest('idle');
+  }
+
+  async function commitApiBaseUrl() {
+    if (!config) return;
+    const url = config.apiBaseUrl.trim();
+    if (!url) return;
+    const ok = await ensureHostPermission(url);
+    if (!ok) {
+      setApiError('Host permission denied — API mode needs access to this endpoint.');
+      setApiTest('error');
+      return;
+    }
+    setApiError('');
+  }
+
+  async function testApi() {
+    if (!config) return;
+    const base = config.apiBaseUrl.trim();
+    const key = config.apiKey.trim();
+    const modelName = config.apiModel.trim();
+    if (!base || !key || !modelName) {
+      setApiError('Fill in base URL, API key, and model first.');
+      setApiTest('error');
+      return;
+    }
+    const granted = await ensureHostPermission(base);
+    if (!granted) {
+      setApiError('Host permission denied — cannot reach this endpoint.');
+      setApiTest('error');
+      return;
+    }
+    setApiTest('testing');
+    setApiError('');
+    try {
+      const origin = base.replace(/\/+$/, '');
+      const res = await fetch(`${origin}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [
+            { role: 'system', content: 'Reply with JSON only.' },
+            {
+              role: 'user',
+              content:
+                'Classify this dummy post. Return {"results":[{"index":1,"hide":false,"reason":"ok"}]}.\n\nPost 1 (@test):\n"""hello"""',
+            },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0,
+          max_tokens: 80,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(`${res.status}: ${body.slice(0, 120)}`);
+      }
+      setApiTest('ok');
+    } catch (err) {
+      setApiTest('error');
+      setApiError(err instanceof Error ? err.message : 'Request failed');
+    }
+  }
+
   function addRule() {
     const r = newRule.trim();
     if (!config || !r) return;
@@ -96,6 +205,8 @@ function App() {
 
   if (!config) return <div className="app">Loading…</div>;
 
+  const provider = config.provider ?? 'on-device';
+
   return (
     <div className="app">
       <header className="header">
@@ -113,8 +224,6 @@ function App() {
           <span className="switch-label">{config.enabled ? 'On' : 'Off'}</span>
         </label>
       </header>
-
-      <ModelBanner model={model} progress={progress} onDownload={downloadModel} />
 
       <section>
         <h2>Hide from feed</h2>
@@ -208,6 +317,95 @@ function App() {
             <li className="empty">Block an author to hide their posts.</li>
           )}
         </ul>
+      </section>
+
+      <section className="model-section">
+        <h2>Model</h2>
+        <div className="tiles">
+          <button
+            type="button"
+            className={provider === 'on-device' ? 'tile tile-on' : 'tile'}
+            aria-pressed={provider === 'on-device'}
+            onClick={() => setProvider('on-device')}
+          >
+            <span className="tile-emoji" aria-hidden="true">
+              💻
+            </span>
+            <span className="tile-label">On-device</span>
+          </button>
+          <button
+            type="button"
+            className={provider === 'openai' ? 'tile tile-on' : 'tile'}
+            aria-pressed={provider === 'openai'}
+            onClick={() => setProvider('openai')}
+          >
+            <span className="tile-emoji" aria-hidden="true">
+              ☁️
+            </span>
+            <span className="tile-label">API</span>
+          </button>
+        </div>
+
+        {provider === 'on-device' ? (
+          <div className="model-panel">
+            <ModelBanner model={model} progress={progress} onDownload={downloadModel} />
+          </div>
+        ) : (
+          <div className="model-panel fields">
+            <label className="field">
+              <span className="field-label">Base URL</span>
+              <input
+                value={config.apiBaseUrl}
+                placeholder="https://api.openai.com/v1"
+                onChange={(e) => setApiBaseUrl(e.target.value)}
+                onBlur={() => void commitApiBaseUrl()}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">API key</span>
+              <input
+                type="password"
+                value={config.apiKey}
+                placeholder="sk-…"
+                onChange={(e) => update({ apiKey: e.target.value })}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">Model</span>
+              <input
+                value={config.apiModel}
+                placeholder="gpt-4o-mini"
+                onChange={(e) => update({ apiModel: e.target.value })}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <p className="hint hint-inline">
+              Posts you scroll past are sent to this endpoint. The key is stored
+              unencrypted in the browser.
+            </p>
+            <div className="api-actions">
+              <button
+                type="button"
+                className="add add-compact"
+                onClick={() => void testApi()}
+                disabled={apiTest === 'testing'}
+              >
+                {apiTest === 'testing' ? 'Testing…' : 'Test connection'}
+              </button>
+              {apiTest === 'ok' && <span className="api-status api-ok">Connected</span>}
+              {apiTest === 'error' && (
+                <span className="api-status api-err" title={apiError}>
+                  {apiError || 'Failed'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       <div className="footer-toggle">

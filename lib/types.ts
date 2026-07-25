@@ -1,5 +1,8 @@
 // Shared types for the X Feed Filter extension.
 
+/** Which backend classifies posts. */
+export type Provider = 'on-device' | 'openai';
+
 /** User-configurable filter settings, persisted in extension storage. */
 export interface FilterConfig {
   /** Master on/off switch for the whole extension. */
@@ -12,6 +15,14 @@ export interface FilterConfig {
   blockedAuthors: string[];
   /** Show per-post debug badges (kept/hidden/blocked/…) on the feed. */
   debug: boolean;
+  /** Which classifier backend to use. */
+  provider: Provider;
+  /** OpenAI-compatible base URL, e.g. https://api.openai.com/v1 (we append /chat/completions). */
+  apiBaseUrl: string;
+  /** API key for the OpenAI-compatible endpoint (stored unencrypted in local storage). */
+  apiKey: string;
+  /** Model name for the OpenAI-compatible endpoint, e.g. gpt-4o-mini. */
+  apiModel: string;
 }
 
 /** A single post extracted from the page, sent to the background for judging. */
@@ -29,8 +40,8 @@ export interface Verdict {
 
 /** Message sent from the content script to the background classifier. */
 export interface ClassifyMessage {
-  type: 'classify';
-  post: PostData;
+  type: 'classifyBatch';
+  posts: PostData[];
 }
 
 /**

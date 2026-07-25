@@ -8,6 +8,8 @@ export default defineConfig({
     description: 'On-device LLM filtering for your X (Twitter) timeline.',
     permissions: ['storage'],
     host_permissions: ['https://x.com/*', 'https://twitter.com/*'],
+    // Granted at runtime when the user configures an OpenAI-compatible endpoint.
+    optional_host_permissions: ['https://*/*', 'http://*/*'],
     minimum_chrome_version: '138',
   },
   webExt: {
