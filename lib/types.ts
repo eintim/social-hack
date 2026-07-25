@@ -36,6 +36,8 @@ export interface PostData {
 export interface Verdict {
   hide: boolean;
   reason: string;
+  /** Model confidence in the decision, 0–100. */
+  confidence: number;
 }
 
 /** Message sent from the content script to the background classifier. */
@@ -68,8 +70,15 @@ export interface PlatformAdapter {
   /**
    * Debug-only: stamp a post with its classification outcome. `label` is the
    * short pill text; `detail` is the full explanation shown on hover.
+   * `confidence` (0–100) is shown beside the label when the model provided one.
    */
-  annotate(node: HTMLElement, label: string, kind: DebugKind, detail?: string): void;
+  annotate(
+    node: HTMLElement,
+    label: string,
+    kind: DebugKind,
+    detail?: string,
+    confidence?: number,
+  ): void;
   /** Remove all debug badges from a DOM subtree. */
   clearAnnotations(root: ParentNode): void;
 }

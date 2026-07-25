@@ -1,6 +1,6 @@
 import type { Verdict } from '@/lib/types';
 
-const keep = (): Verdict => ({ hide: false, reason: '' });
+const keep = (): Verdict => ({ hide: false, reason: '', confidence: 0 });
 
 /** A fail-open array of `count` "keep" verdicts. */
 export function allKeep(count: number): Verdict[] {
@@ -20,11 +20,21 @@ function coerceJson(raw: string): string {
   return raw;
 }
 
+/** Normalize model confidence to an integer 0–100. */
+export function parseConfidence(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  // Some models return 0–1 floats even when asked for 0–100.
+  const pct = n > 0 && n <= 1 ? n * 100 : n;
+  return Math.max(0, Math.min(100, Math.round(pct)));
+}
+
 /**
  * Parse a batch model response of the form
- * `{"results":[{"index","hide","reason"}]}` into an array aligned to the
- * `count` posts (1-based index). Anything missing or malformed fails open
- * (that post is kept), so a bad/partial response never hides the wrong posts.
+ * `{"results":[{"index","hide","reason","confidence"}]}` into an array aligned
+ * to the `count` posts (1-based index). Anything missing or malformed fails
+ * open (that post is kept), so a bad/partial response never hides the wrong
+ * posts.
  */
 export function verdictsFromJson(raw: string, count: number): Verdict[] {
   const out = allKeep(count);
@@ -39,10 +49,11 @@ export function verdictsFromJson(raw: string, count: number): Verdict[] {
   for (const r of results) {
     const idx = Number((r as { index?: unknown })?.index);
     if (!Number.isInteger(idx) || idx < 1 || idx > count) continue;
-    const rec = r as { hide?: unknown; reason?: unknown };
+    const rec = r as { hide?: unknown; reason?: unknown; confidence?: unknown };
     out[idx - 1] = {
       hide: !!rec.hide,
       reason: typeof rec.reason === 'string' ? rec.reason : '',
+      confidence: parseConfidence(rec.confidence),
     };
   }
   return out;

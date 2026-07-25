@@ -8,8 +8,9 @@ export const VERDICT_SCHEMA = {
   properties: {
     hide: { type: 'boolean' },
     reason: { type: 'string' },
+    confidence: { type: 'integer', minimum: 0, maximum: 100 },
   },
-  required: ['hide', 'reason'],
+  required: ['hide', 'reason', 'confidence'],
 } as const;
 
 /**
@@ -30,8 +31,9 @@ export const BATCH_VERDICT_SCHEMA = {
           index: { type: 'integer' },
           hide: { type: 'boolean' },
           reason: { type: 'string' },
+          confidence: { type: 'integer', minimum: 0, maximum: 100 },
         },
-        required: ['index', 'hide', 'reason'],
+        required: ['index', 'hide', 'reason', 'confidence'],
       },
     },
   },
@@ -69,13 +71,20 @@ export function buildSystemPrompt(config: FilterConfig): string {
     '- Judge only the post content provided, not your general opinions.',
     '',
     'You will be given one or more numbered posts. Return a JSON object of the form',
-    '{"results": [{"index": <post number>, "hide": <boolean>, "reason": <string>}, ...]}',
+    '{"results": [{"index": <post number>, "hide": <boolean>, "reason": <string>, "confidence": <0-100>}, ...]}',
     'with exactly one entry per post, matching each post\'s number.',
     'Always fill "reason" with one short, concrete sentence about the post itself.',
     '- When hiding: name the matched criterion and how the post relates to it.',
     '- When keeping: briefly state what the post is actually about (topic or gist).',
     '- Never write meta reasons like "does not match", "none of the criteria",',
     '  "unrelated to the filters", or similar. Always describe the post content.',
+    '',
+    'Always set "confidence" to an integer from 0 to 100 for how sure you are',
+    'about the hide/keep decision (not about the topic in general):',
+    '- 90–100: clear and unambiguous.',
+    '- 60–89: likely, with some ambiguity.',
+    '- Below 60: borderline or guessing — still HIDE when unsure, but report',
+    '  the low confidence honestly.',
   ].join('\n');
 }
 

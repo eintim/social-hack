@@ -4,14 +4,55 @@ import type { DebugKind, PlatformAdapter } from '@/lib/types';
 
 const PLACEHOLDER_ATTR = 'data-xff-placeholder';
 const DEBUG_ATTR = 'data-xff-debug';
+const DEBUG_SLOT_ATTR = 'data-xff-debug-slot';
 
+/** X-native accent colors so the badge reads as part of the action row. */
 const DEBUG_COLORS: Record<DebugKind, string> = {
-  pending: 'rgb(255, 173, 31)', // amber — awaiting verdict
-  kept: 'rgb(0, 186, 124)', // green — visible
-  hidden: 'rgb(244, 33, 46)', // red — hidden by LLM
-  blocked: 'rgb(120, 86, 255)', // purple — author blocklist
-  skipped: 'rgb(113, 118, 123)', // gray — not evaluated
+  pending: 'rgb(255, 212, 0)',
+  kept: 'rgb(0, 186, 124)',
+  hidden: 'rgb(249, 24, 128)',
+  blocked: 'rgb(120, 86, 255)',
+  skipped: 'rgb(113, 118, 123)',
 };
+
+/**
+ * The reply/repost/like row for this article. Skips buttons that live inside a
+ * quoted/nested tweet so we don't hang the badge on the wrong group.
+ */
+function findActionBar(article: HTMLElement): HTMLElement | null {
+  for (const reply of article.querySelectorAll('[data-testid="reply"]')) {
+    const nested = reply.closest('article[data-testid="tweet"], [data-testid="quoteTweet"]');
+    if (nested && nested !== article) continue;
+    const group = reply.closest<HTMLElement>('[role="group"]');
+    if (group && article.contains(group)) return group;
+  }
+  return null;
+}
+
+/** Style the badge for an action-bar slot (or the collapsed placeholder). */
+function styleBadge(badge: HTMLElement, kind: DebugKind) {
+  const color = DEBUG_COLORS[kind];
+  badge.style.cssText =
+    'box-sizing:border-box;display:inline-flex;align-items:center;' +
+    'max-width:168px;height:20px;padding:0 4px;margin:0;border:none;' +
+    'border-radius:4px;background:transparent;cursor:help;font-family:inherit;' +
+    'font-size:13px;font-weight:700;line-height:16px;white-space:nowrap;' +
+    `overflow:hidden;text-overflow:ellipsis;color:${color};`;
+}
+
+/** Flex-none wrapper so X's equal-width action slots don't stretch the badge. */
+function mountInActionBar(actionBar: HTMLElement, badge: HTMLElement) {
+  let slot = actionBar.querySelector<HTMLElement>(`:scope > [${DEBUG_SLOT_ATTR}]`);
+  if (!slot) {
+    slot = document.createElement('div');
+    slot.setAttribute(DEBUG_SLOT_ATTR, 'true');
+    slot.style.cssText =
+      'display:flex;align-items:center;justify-content:flex-end;' +
+      'flex:0 0 auto;min-width:0;align-self:center;padding:0 4px;';
+    actionBar.appendChild(slot);
+  }
+  slot.appendChild(badge);
+}
 
 // --- Fast custom tooltip -----------------------------------------------------
 // The native `title` attribute takes ~1.5s to appear and can't be styled. This
@@ -38,11 +79,19 @@ function showTip(badge: HTMLElement, text: string) {
   const el = ensureTip();
   el.textContent = text;
   el.style.opacity = '1';
-  // Measure now that content is set, then right-align under the badge.
   const b = badge.getBoundingClientRect();
-  const left = Math.max(8, Math.min(b.right - el.offsetWidth, window.innerWidth - el.offsetWidth - 8));
+  const left = Math.max(
+    8,
+    Math.min(b.right - el.offsetWidth, window.innerWidth - el.offsetWidth - 8),
+  );
   el.style.left = `${left}px`;
-  el.style.top = `${b.bottom + 6}px`;
+  // Prefer below; flip above when the action bar sits near the viewport bottom.
+  const below = b.bottom + 6;
+  const tipH = el.offsetHeight || 40;
+  el.style.top =
+    below + tipH > window.innerHeight - 8
+      ? `${Math.max(8, b.top - tipH - 6)}px`
+      : `${below}px`;
 }
 
 function hideTip() {
@@ -130,8 +179,12 @@ export const xAdapter: PlatformAdapter = {
     if (node.dataset.xffCollapsed === 'true' || node.dataset.xffRevealed === 'true') return;
     node.dataset.xffCollapsed = 'true';
 
+    // Detach the debug badge before hiding children so we can remount it on
+    // the placeholder (it usually lives inside the action bar).
+    const badge = node.querySelector<HTMLElement>(`[${DEBUG_ATTR}]`);
+    badge?.remove();
+
     for (const child of Array.from(node.children)) {
-      if ((child as HTMLElement).hasAttribute(DEBUG_ATTR)) continue; // keep the debug badge visible
       (child as HTMLElement).style.display = 'none';
     }
 
@@ -148,6 +201,9 @@ export const xAdapter: PlatformAdapter = {
     label.textContent = `Hidden — ${reason}`;
     label.style.cssText = 'flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
 
+    const trailing = document.createElement('div');
+    trailing.style.cssText = 'display:flex;align-items:center;gap:8px;flex:none;';
+
     const btn = document.createElement('button');
     btn.textContent = 'Show';
     // Subtle inline text link, matching X's accent, not a filled pill.
@@ -160,46 +216,98 @@ export const xAdapter: PlatformAdapter = {
       xAdapter.restore(node);
     });
 
-    ph.append(label, btn);
+    trailing.append(btn);
+    ph.append(label, trailing);
     node.appendChild(ph);
+
+    // Remount an existing badge next to Show (annotate may also place a fresh one).
+    if (badge) {
+      styleBadge(badge, (badge.dataset.xffKind as DebugKind) || 'hidden');
+      trailing.insertBefore(badge, btn);
+    }
   },
 
   restore(node) {
+    const badge = node.querySelector<HTMLElement>(`[${DEBUG_ATTR}]`);
+    badge?.remove();
+
     node.querySelectorAll(`:scope > [${PLACEHOLDER_ATTR}]`).forEach((el) => el.remove());
     for (const child of Array.from(node.children)) {
       (child as HTMLElement).style.display = '';
     }
     delete node.dataset.xffCollapsed;
     node.dataset.xffRevealed = 'true';
+
+    // Put the badge back on the action bar once the post is visible again.
+    if (badge) {
+      const kind = (badge.dataset.xffKind as DebugKind) || 'kept';
+      styleBadge(badge, kind);
+      const bar = findActionBar(node);
+      if (bar) mountInActionBar(bar, badge);
+      else node.appendChild(badge);
+    }
   },
 
-  annotate(node, label, kind, detail) {
-    // A small pill in the post's top-right corner showing what the filter did.
-    // `cursor:help` + a native `title` reveal the full reason on hover.
-    let badge = node.querySelector<HTMLElement>(`:scope > [${DEBUG_ATTR}]`);
+  annotate(node, label, kind, detail, confidence) {
+    let badge = node.querySelector<HTMLElement>(`[${DEBUG_ATTR}]`);
     if (!badge) {
       badge = document.createElement('div');
       badge.setAttribute(DEBUG_ATTR, 'true');
-      badge.style.cssText =
-        'position:absolute;top:6px;right:6px;z-index:9999;cursor:help;' +
-        'max-width:70%;padding:2px 8px;border-radius:9999px;' +
-        'font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;' +
-        'font-weight:700;line-height:1.4;color:#fff;white-space:nowrap;' +
-        'overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 3px rgba(0,0,0,0.4);';
-      if (getComputedStyle(node).position === 'static') node.style.position = 'relative';
-      // Instant custom tooltip; reads the current reason from the dataset.
+      badge.setAttribute('role', 'status');
+      badge.setAttribute('aria-label', 'Filter outcome');
+      badge.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
       badge.addEventListener('mouseenter', () => showTip(badge!, badge!.dataset.xffTip || ''));
       badge.addEventListener('mouseleave', hideTip);
+    }
+
+    badge.dataset.xffKind = kind;
+    badge.dataset.xffTip = detail || label;
+    badge.replaceChildren();
+
+    const text = document.createElement('span');
+    text.textContent = label;
+    badge.appendChild(text);
+
+    if (confidence != null && confidence > 0) {
+      const conf = document.createElement('span');
+      conf.textContent = `${Math.round(confidence)}%`;
+      conf.style.cssText = 'margin-left:5px;font-weight:500;opacity:0.72;';
+      badge.appendChild(conf);
+    }
+
+    styleBadge(badge, kind);
+
+    const collapsed = node.dataset.xffCollapsed === 'true';
+    const placeholder = node.querySelector<HTMLElement>(`:scope > [${PLACEHOLDER_ATTR}]`);
+    const actionBar = findActionBar(node);
+
+    if (collapsed && placeholder) {
+      // Sit beside the Show control on the placeholder row.
+      const trailing = placeholder.lastElementChild;
+      if (trailing instanceof HTMLElement) {
+        trailing.insertBefore(badge, trailing.firstChild);
+      } else {
+        placeholder.appendChild(badge);
+      }
+    } else if (actionBar) {
+      mountInActionBar(actionBar, badge);
+    } else {
+      // Tweet chrome not ready yet — keep a discreet inline fallback.
+      badge.style.position = 'absolute';
+      badge.style.bottom = '8px';
+      badge.style.right = '12px';
+      badge.style.zIndex = '2';
+      if (getComputedStyle(node).position === 'static') node.style.position = 'relative';
       node.appendChild(badge);
     }
-    badge.style.display = 'block';
-    badge.style.background = DEBUG_COLORS[kind];
-    badge.textContent = label;
-    badge.dataset.xffTip = detail || label; // full reason, shown on hover
   },
 
   clearAnnotations(root) {
     root.querySelectorAll(`[${DEBUG_ATTR}]`).forEach((el) => el.remove());
+    root.querySelectorAll(`[${DEBUG_SLOT_ATTR}]`).forEach((el) => el.remove());
     hideTip();
   },
 };

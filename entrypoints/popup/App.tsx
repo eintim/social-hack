@@ -166,7 +166,7 @@ function App() {
             {
               role: 'user',
               content:
-                'Classify this dummy post. Return {"results":[{"index":1,"hide":false,"reason":"ok"}]}.\n\nPost 1 (@test):\n"""hello"""',
+                'Classify this dummy post. Return {"results":[{"index":1,"hide":false,"reason":"ok","confidence":100}]}.\n\nPost 1 (@test):\n"""hello"""',
             },
           ],
           response_format: { type: 'json_object' },

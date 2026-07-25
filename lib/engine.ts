@@ -4,8 +4,8 @@ import type { DebugKind, FilterConfig, PostData, Verdict } from '@/lib/types';
 
 /** A cached, DOM-independent verdict for a post, keyed by its stable id. */
 type Decision =
-  | { kind: 'hide'; reason: string }
-  | { kind: 'keep'; reason: string }
+  | { kind: 'hide'; reason: string; confidence: number }
+  | { kind: 'keep'; reason: string; confidence: number }
   | { kind: 'block'; author: string };
 
 /**
@@ -42,11 +42,17 @@ export function startEngine() {
   // onto posts already on screen — even ones processed while debug was off.
   const outcomes = new WeakMap<
     HTMLElement,
-    { label: string; kind: DebugKind; detail: string }
+    { label: string; kind: DebugKind; detail: string; confidence?: number }
   >();
-  const debug = (node: HTMLElement, label: string, kind: DebugKind, detail = label) => {
-    outcomes.set(node, { label, kind, detail });
-    if (config.debug) adapter!.annotate(node, label, kind, detail);
+  const debug = (
+    node: HTMLElement,
+    label: string,
+    kind: DebugKind,
+    detail = label,
+    confidence?: number,
+  ) => {
+    outcomes.set(node, { label, kind, detail, confidence });
+    if (config.debug) adapter!.annotate(node, label, kind, detail, confidence);
   };
 
   // Threads that have been hidden, remembered per-node so late-loading siblings
@@ -54,29 +60,46 @@ export function startEngine() {
   // hide instead of being classified fresh and shown.
   const threadHidden = new WeakSet<HTMLElement>();
   const threadReason = new WeakMap<HTMLElement, string>();
+  const threadConfidence = new WeakMap<HTMLElement, number>();
 
-  const markThreadHidden = (node: HTMLElement, why: string) => {
+  const markThreadHidden = (node: HTMLElement, why: string, confidence?: number) => {
     threadHidden.add(node);
     threadReason.set(node, why);
+    if (confidence != null) threadConfidence.set(node, confidence);
   };
 
   // Collapse a matched post AND the rest of its thread, so hiding one post in a
   // self-thread hides the whole thread. Every sibling's hide is cached by id so
   // it survives virtualization too.
-  const hideThread = (node: HTMLElement, shortWhy: string, detail: string) => {
+  const hideThread = (
+    node: HTMLElement,
+    shortWhy: string,
+    detail: string,
+    confidence?: number,
+  ) => {
     const thread = adapter!.findThread(node);
     for (const n of thread) {
       adapter!.collapse(n, shortWhy);
-      markThreadHidden(n, shortWhy);
+      markThreadHidden(n, shortWhy, confidence);
       if (n === node) {
-        debug(n, `✕ ${shortWhy}`, 'hidden', detail);
+        debug(n, `✕ ${shortWhy}`, 'hidden', detail, confidence);
       } else {
         const sib = adapter!.extractPost(n);
         if (sib) {
-          decisions.set(sib.id, { kind: 'hide', reason: shortWhy });
+          decisions.set(sib.id, {
+            kind: 'hide',
+            reason: shortWhy,
+            confidence: confidence ?? 0,
+          });
           applied.set(n, stamp(sib.id));
         }
-        debug(n, '✕ thread', 'hidden', `Hidden because another post in this thread matched: ${shortWhy}`);
+        debug(
+          n,
+          '✕ thread',
+          'hidden',
+          `Hidden because another post in this thread matched: ${shortWhy}`,
+          confidence,
+        );
       }
     }
   };
@@ -89,21 +112,48 @@ export function startEngine() {
     const hiddenSib = thread.find((n) => n !== node && threadHidden.has(n));
     if (!hiddenSib) return null;
     const why = threadReason.get(hiddenSib) ?? 'another post in this thread matched';
+    const confidence = threadConfidence.get(hiddenSib);
     adapter!.collapse(node, why);
-    markThreadHidden(node, why);
-    debug(node, '✕ thread', 'hidden', `Hidden because another post in this thread matched: ${why}`);
+    markThreadHidden(node, why, confidence);
+    debug(
+      node,
+      '✕ thread',
+      'hidden',
+      `Hidden because another post in this thread matched: ${why}`,
+      confidence,
+    );
     return why;
   };
 
   // Re-apply a cached verdict to a (possibly brand-new) node — no LLM call.
   const applyDecision = (node: HTMLElement, d: Decision) => {
     if (d.kind === 'hide') {
-      hideThread(node, d.reason, `Hidden — the model said: ${d.reason}`);
+      const confNote =
+        d.confidence > 0 ? ` (${d.confidence}% confidence)` : '';
+      hideThread(
+        node,
+        d.reason,
+        `Hidden${confNote} — the model said: ${d.reason}`,
+        d.confidence || undefined,
+      );
     } else if (d.kind === 'block') {
       adapter!.collapse(node, `author @${d.author}`);
-      debug(node, `⛔ blocked @${d.author}`, 'blocked', `Hidden because @${d.author} is on your blocked-authors list (no LLM involved).`);
+      debug(
+        node,
+        `⛔ blocked @${d.author}`,
+        'blocked',
+        `Hidden because @${d.author} is on your blocked-authors list (no LLM involved).`,
+      );
     } else {
-      debug(node, '✓ kept', 'kept', `Kept — the model said: ${d.reason}`);
+      const confNote =
+        d.confidence > 0 ? ` (${d.confidence}% confidence)` : '';
+      debug(
+        node,
+        '✓ kept',
+        'kept',
+        `Kept${confNote} — the model said: ${d.reason}`,
+        d.confidence || undefined,
+      );
     }
   };
 
@@ -189,7 +239,11 @@ export function startEngine() {
     // Inherit a hide from a thread sibling that was already hidden.
     const inherited = inheritThreadHide(node);
     if (inherited) {
-      decisions.set(post.id, { kind: 'hide', reason: inherited });
+      decisions.set(post.id, {
+        kind: 'hide',
+        reason: inherited,
+        confidence: threadConfidence.get(node) ?? 0,
+      });
       applied.set(node, stamp(post.id));
       return;
     }
@@ -238,8 +292,16 @@ export function startEngine() {
       return;
     }
     const decision: Decision = verdict.hide
-      ? { kind: 'hide', reason: verdict.reason || 'matched a filter' }
-      : { kind: 'keep', reason: verdict.reason || 'did not match any active filter' };
+      ? {
+          kind: 'hide',
+          reason: verdict.reason || 'matched a filter',
+          confidence: verdict.confidence,
+        }
+      : {
+          kind: 'keep',
+          reason: verdict.reason || 'did not match any active filter',
+          confidence: verdict.confidence,
+        };
     decisions.set(post.id, decision);
     applyDecision(node, decision);
   }
@@ -305,7 +367,7 @@ export function startEngine() {
     } else if (!wasDebug && c.debug) {
       for (const node of adapter!.findPosts(document)) {
         const o = outcomes.get(node);
-        if (o) adapter!.annotate(node, o.label, o.kind, o.detail);
+        if (o) adapter!.annotate(node, o.label, o.kind, o.detail, o.confidence);
       }
     }
   });
