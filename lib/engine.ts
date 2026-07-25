@@ -1,6 +1,6 @@
-import { filterConfig, DEFAULT_CONFIG } from '@/lib/storage';
+import { filterConfig, DEFAULT_CONFIG, normalizeConfig } from '@/lib/storage';
 import { getAdapter } from '@/lib/adapters';
-import type { DebugKind, FilterConfig, PostData, Verdict } from '@/lib/types';
+import type { DebugKind, FilterConfig, PostData, PostMetrics, Verdict } from '@/lib/types';
 
 /** A cached, DOM-independent verdict for a post, keyed by its stable id. */
 type Decision =
@@ -8,10 +8,27 @@ type Decision =
   | { kind: 'keep'; reason: string; confidence: number }
   | { kind: 'block'; author: string };
 
+/** Engagement rate as a percent, or null when views are missing/zero. */
+function engagementRate(m: PostMetrics): number | null {
+  if (!m.views || m.views <= 0) return null;
+  return ((m.likes + m.replies + m.reposts) / m.views) * 100;
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  return String(n);
+}
+
+function metricsKey(m: PostMetrics): string {
+  return `${m.replies}:${m.reposts}:${m.likes}:${m.views}`;
+}
+
 /**
  * Generic, platform-independent content-script engine: observes the feed,
- * extracts posts via the active adapter, applies the deterministic author
- * blocklist locally, and defers everything else to the background LLM.
+ * extracts posts via the active adapter, applies deterministic filters
+ * (author blocklist, low engagement) locally, and defers topic/rule
+ * matching to the background LLM.
  */
 export function startEngine() {
   const adapter = getAdapter(location.hostname);
@@ -53,6 +70,38 @@ export function startEngine() {
   ) => {
     outcomes.set(node, { label, kind, detail, confidence });
     if (config.debug) adapter!.annotate(node, label, kind, detail, confidence);
+  };
+
+  // Last metrics fingerprint (+ threshold) painted on each node, so late-hydrated
+  // view counts update the badge without thrashing the DOM every scan.
+  const erApplied = new WeakMap<HTMLElement, string>();
+
+  const updateEngagement = (node: HTMLElement) => {
+    if (!config.enabled || !config.showEngagement) return;
+    const metrics = adapter!.extractMetrics(node);
+    if (!metrics) return;
+    const rate = engagementRate(metrics);
+    if (rate == null) {
+      // Views not ready yet — clear a stale badge and wait for a later scan.
+      if (erApplied.has(node)) {
+        const badge = node.querySelector('[data-xff-er]');
+        badge?.remove();
+        erApplied.delete(node);
+      }
+      return;
+    }
+    const threshold = config.engagementHighPct;
+    const key = `${metricsKey(metrics)}@${threshold}`;
+    const existing = node.querySelector('[data-xff-er]');
+    if (erApplied.get(node) === key && existing) return;
+    erApplied.set(node, key);
+    const high = rate >= threshold;
+    const detail =
+      `${formatCount(metrics.likes)} likes · ${formatCount(metrics.replies)} replies · ` +
+      `${formatCount(metrics.reposts)} reposts · ${formatCount(metrics.views)} views` +
+      ` → ${rate.toFixed(2)}%` +
+      (high ? ` (hot ≥ ${threshold}%)` : '');
+    adapter!.annotateEngagement(node, rate, high, detail);
   };
 
   // Threads that have been hidden, remembered per-node so late-loading siblings
@@ -102,6 +151,38 @@ export function startEngine() {
         );
       }
     }
+  };
+
+  /**
+   * Deterministic low-engagement hide. Returns true when the post was (or is
+   * already) hidden for low ER. Waits for views to hydrate before deciding —
+   * call on every scan so late view counts can still trigger a hide.
+   */
+  const tryHideLowEngagement = (node: HTMLElement, post: PostData): boolean => {
+    if (!config.hideLowEngagement) return false;
+    const metrics = adapter!.extractMetrics(node);
+    if (!metrics) return false;
+    const rate = engagementRate(metrics);
+    if (rate == null) return false; // views not ready yet
+    const threshold = config.hideLowEngagementPct;
+    if (rate >= threshold) return false;
+
+    const existing = decisions.get(post.id);
+    if (existing?.kind === 'block') return false;
+    if (existing?.kind === 'hide') {
+      applyDecision(node, existing);
+      return true;
+    }
+
+    const shortWhy = `low ER < ${threshold}%`;
+    const detail =
+      `Hidden — engagement rate ${rate.toFixed(2)}% is below your ${threshold}% minimum ` +
+      `(${formatCount(metrics.likes)} likes · ${formatCount(metrics.replies)} replies · ` +
+      `${formatCount(metrics.reposts)} reposts · ${formatCount(metrics.views)} views).`;
+    const d: Decision = { kind: 'hide', reason: shortWhy, confidence: 100 };
+    decisions.set(post.id, d);
+    hideThread(node, shortWhy, detail, 100);
+    return true;
   };
 
   // If any currently-rendered sibling of this post is a hidden thread, collapse
@@ -224,6 +305,13 @@ export function startEngine() {
       return;
     }
 
+    // Low-ER check runs before the applied early-return so late-hydrated view
+    // counts can still hide a post that was kept while views were missing.
+    if (tryHideLowEngagement(node, post)) {
+      applied.set(node, stamp(post.id));
+      return;
+    }
+
     // This exact node already reflects this post under the current config.
     if (applied.get(node) === stamp(post.id)) return;
 
@@ -314,13 +402,16 @@ export function startEngine() {
       scheduled = false;
       const posts = adapter!.findPosts(document);
       console.log('[XFF] scan found', posts.length, 'post node(s) in DOM');
-      for (const node of posts) void processPost(node);
+      for (const node of posts) {
+        void processPost(node);
+        updateEngagement(node);
+      }
     });
   }
 
   filterConfig.getValue().then((c) => {
-    config = c;
-    console.log('[XFF] config loaded', c);
+    config = normalizeConfig(c);
+    console.log('[XFF] config loaded', config);
     scan();
   });
   // Signature of everything that affects a verdict (i.e. everything but the
@@ -331,14 +422,19 @@ export function startEngine() {
       rules: c.rules,
       categories: c.categories,
       blockedAuthors: c.blockedAuthors,
+      hideLowEngagement: c.hideLowEngagement,
+      hideLowEngagementPct: c.hideLowEngagementPct,
       provider: c.provider,
       apiBaseUrl: c.apiBaseUrl,
       apiKey: c.apiKey,
       apiModel: c.apiModel,
     });
 
-  filterConfig.watch((c) => {
+  filterConfig.watch((raw) => {
+    const c = normalizeConfig(raw);
     const wasDebug = config.debug;
+    const wasEngagement = config.showEngagement;
+    const wasHighPct = config.engagementHighPct;
     const filtersChanged = filterSig(config) !== filterSig(c);
     config = c;
     console.log('[XFF] config changed', { filtersChanged, c });
@@ -356,6 +452,9 @@ export function startEngine() {
       for (const resolve of resolvers.values()) resolve(null);
       resolvers.clear();
       inflight.clear();
+      if (!c.enabled || !c.showEngagement) {
+        adapter!.clearEngagement(document);
+      }
       scan();
       return;
     }
@@ -368,6 +467,17 @@ export function startEngine() {
       for (const node of adapter!.findPosts(document)) {
         const o = outcomes.get(node);
         if (o) adapter!.annotate(node, o.label, o.kind, o.detail, o.confidence);
+      }
+    }
+
+    // Engagement toggle / threshold: clear or re-paint without touching LLM state.
+    if (wasEngagement && !c.showEngagement) {
+      adapter!.clearEngagement(document);
+      // WeakMap can't be cleared wholesale; fingerprints are overwritten on next on.
+    } else if (c.showEngagement && (!wasEngagement || wasHighPct !== c.engagementHighPct)) {
+      for (const node of adapter!.findPosts(document)) {
+        erApplied.delete(node);
+        updateEngagement(node);
       }
     }
   });

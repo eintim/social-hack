@@ -15,6 +15,14 @@ export interface FilterConfig {
   blockedAuthors: string[];
   /** Show per-post debug badges (kept/hidden/blocked/…) on the feed. */
   debug: boolean;
+  /** Show engagement-rate badges on posts (likes+replies+reposts ÷ views). */
+  showEngagement: boolean;
+  /** ER % at or above which a post is marked "Hot". */
+  engagementHighPct: number;
+  /** Hide posts whose engagement rate is below hideLowEngagementPct. */
+  hideLowEngagement: boolean;
+  /** Minimum ER %; posts below this are hidden when hideLowEngagement is on. */
+  hideLowEngagementPct: number;
   /** Which classifier backend to use. */
   provider: Provider;
   /** OpenAI-compatible base URL, e.g. https://api.openai.com/v1 (we append /chat/completions). */
@@ -30,6 +38,15 @@ export interface PostData {
   id: string;
   author: string;
   text: string;
+}
+
+/** Engagement counts scraped from a post's action bar. */
+export interface PostMetrics {
+  replies: number;
+  reposts: number;
+  likes: number;
+  /** Absent or 0 when X hasn't rendered view counts yet. */
+  views: number;
 }
 
 /** The classification result for a post. */
@@ -63,6 +80,8 @@ export interface PlatformAdapter {
   findThread(node: HTMLElement): HTMLElement[];
   /** Pull author + text out of a post node (null if it isn't a usable post). */
   extractPost(node: HTMLElement): PostData | null;
+  /** Pull reply/repost/like/view counts from a post's action bar. */
+  extractMetrics(node: HTMLElement): PostMetrics | null;
   /** Collapse a matched post into a thin placeholder with a reason + reveal. */
   collapse(node: HTMLElement, reason: string): void;
   /** Undo a collapse (the "Show anyway" action). */
@@ -81,6 +100,13 @@ export interface PlatformAdapter {
   ): void;
   /** Remove all debug badges from a DOM subtree. */
   clearAnnotations(root: ParentNode): void;
+  /**
+   * Stamp a post with its engagement rate. `ratePct` is (likes+replies+reposts)/views×100;
+   * `high` switches to the Hot styling when at/above the user threshold.
+   */
+  annotateEngagement(node: HTMLElement, ratePct: number, high: boolean, detail: string): void;
+  /** Remove all engagement-rate badges from a DOM subtree. */
+  clearEngagement(root: ParentNode): void;
 }
 
 /** Outcome shown by the debug badge on each post. */

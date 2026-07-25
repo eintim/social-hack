@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { filterConfig, DEFAULT_CONFIG } from '@/lib/storage';
+import { filterConfig, normalizeConfig } from '@/lib/storage';
 import { CATEGORIES } from '@/lib/categories';
 import type { FilterConfig, Provider } from '@/lib/types';
 import './App.css';
@@ -11,14 +11,7 @@ const EXPECTED = [{ type: 'text' as const, languages: ['en'] }];
 
 /** Fill in provider fields missing from older stored configs. */
 function withDefaults(c: FilterConfig): FilterConfig {
-  return {
-    ...DEFAULT_CONFIG,
-    ...c,
-    provider: c.provider ?? DEFAULT_CONFIG.provider,
-    apiBaseUrl: c.apiBaseUrl ?? DEFAULT_CONFIG.apiBaseUrl,
-    apiKey: c.apiKey ?? DEFAULT_CONFIG.apiKey,
-    apiModel: c.apiModel ?? DEFAULT_CONFIG.apiModel,
-  };
+  return normalizeConfig(c);
 }
 
 function normalizeAvailability(value: string): ModelState {
@@ -51,7 +44,19 @@ function App() {
   const [apiError, setApiError] = useState('');
 
   useEffect(() => {
-    filterConfig.getValue().then((c) => setConfig(withDefaults(c)));
+    filterConfig.getValue().then((c) => {
+      const next = withDefaults(c);
+      setConfig(next);
+      // Persist newly added fields for older installs.
+      if (
+        c.showEngagement === undefined ||
+        c.engagementHighPct === undefined ||
+        c.hideLowEngagement === undefined ||
+        c.hideLowEngagementPct === undefined
+      ) {
+        void filterConfig.setValue(next);
+      }
+    });
     checkModel();
     // Poll so the indicator updates live (downloadable → downloading → ready)
     // even when the download was triggered outside the popup.
@@ -328,6 +333,74 @@ function App() {
             <li className="empty">Add a handle to hide every post from that account.</li>
           )}
         </ul>
+      </section>
+
+      <section>
+        <h2>Engagement</h2>
+        <div className="footer-toggle engagement-toggle">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={config.showEngagement}
+              onChange={(e) => update({ showEngagement: e.target.checked })}
+              aria-label="Show engagement rates"
+            />
+            <span className="switch-track" aria-hidden="true">
+              <span className="switch-thumb" />
+            </span>
+            <span className="switch-label">Show engagement rates</span>
+          </label>
+        </div>
+        <label className={`field${config.showEngagement ? '' : ' field-disabled'}`}>
+          <span className="field-label">High threshold %</span>
+          <input
+            type="number"
+            min={0.1}
+            step={0.1}
+            disabled={!config.showEngagement}
+            value={config.engagementHighPct}
+            onChange={(e) => {
+              const n = parseFloat(e.target.value);
+              if (!Number.isFinite(n) || n < 0) return;
+              update({ engagementHighPct: n });
+            }}
+          />
+        </label>
+        <p className="hint hint-inline">
+          (likes + replies + reposts) ÷ views. Posts at or above the threshold get a Hot badge.
+        </p>
+        <div className="footer-toggle engagement-toggle">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={config.hideLowEngagement}
+              onChange={(e) => update({ hideLowEngagement: e.target.checked })}
+              aria-label="Hide low engagement"
+            />
+            <span className="switch-track" aria-hidden="true">
+              <span className="switch-thumb" />
+            </span>
+            <span className="switch-label">Hide low engagement</span>
+          </label>
+        </div>
+        <label className={`field${config.hideLowEngagement ? '' : ' field-disabled'}`}>
+          <span className="field-label">Min engagement %</span>
+          <input
+            type="number"
+            min={0}
+            step={0.1}
+            disabled={!config.hideLowEngagement}
+            value={config.hideLowEngagementPct}
+            onChange={(e) => {
+              const n = parseFloat(e.target.value);
+              if (!Number.isFinite(n) || n < 0) return;
+              update({ hideLowEngagementPct: n });
+            }}
+          />
+        </label>
+        <p className="hint hint-inline">
+          Posts below this rate are hidden once view counts load. Same formula as above.
+        </p>
       </section>
 
       <section className="model-section">

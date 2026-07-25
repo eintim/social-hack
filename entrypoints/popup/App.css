@@ -569,6 +569,11 @@ section h2 {
   gap: 4px;
 }
 
+.field-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .field-label {
   font-family: var(--font-display);
   font-size: 10px;
@@ -691,6 +696,11 @@ section h2 {
   align-items: center;
   gap: 10px;
   margin-top: 16px;
+}
+
+.engagement-toggle {
+  margin-top: 0;
+  margin-bottom: 10px;
 }
 
 .footer-toggle .switch {

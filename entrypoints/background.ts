@@ -1,4 +1,4 @@
-import { filterConfig, DEFAULT_CONFIG } from '@/lib/storage';
+import { filterConfig, DEFAULT_CONFIG, normalizeConfig } from '@/lib/storage';
 import { classifyBatch, resetOnDeviceSession } from '@/lib/classifier';
 import { allKeep } from '@/lib/classifier/parse';
 import type { FilterConfig, PostData, Verdict } from '@/lib/types';
@@ -8,10 +8,10 @@ export default defineBackground(() => {
 
   let config: FilterConfig = DEFAULT_CONFIG;
   filterConfig.getValue().then((c) => {
-    config = c;
+    config = normalizeConfig(c);
   });
   filterConfig.watch((c) => {
-    config = c;
+    config = normalizeConfig(c);
     // Criteria or provider may have changed — drop the cached on-device session.
     resetOnDeviceSession();
   });
