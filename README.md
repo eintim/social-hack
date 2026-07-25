@@ -20,7 +20,7 @@ Feed Filter is a Chrome extension that overrides X's ranking algorithm with your
 
 X's algorithm decides what you see, not you — and it optimizes for engagement, not for your time. If you create content, you can't just log off either: X is a research tool, a distribution channel, and a networking tool all at once. So you scroll past outrage bait, crypto shills, engagement-farming threads, and ads dressed up as posts to get to the handful of posts that actually matter.
 
-"Mute this word" is keyword-matching and misses anything phrased differently. Server-side moderation hands your feed to a third-party API. Feed Filter takes the ranking decision back from the algorithm and gives it to you: say, in plain language, *"hide AI hype threads"* or *"hide anything that's obviously an ad,"* and a language model re-judges every post against your rules as the timeline renders — locally, on-device, with nothing sent anywhere. You define the feed; the algorithm just supplies the raw posts.
+Feed Filter takes the ranking decision back from the algorithm and gives it to you: say, in plain language, *"hide AI hype threads"* or *"hide anything that's obviously an ad,"* and a language model re-judges every post against your rules as the timeline renders — locally, on-device, with nothing sent anywhere. You define the feed; the algorithm just supplies the raw posts.
 
 ## Features
 
