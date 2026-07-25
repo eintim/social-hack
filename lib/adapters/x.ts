@@ -50,8 +50,16 @@ function hideTip() {
 }
 
 function extractId(node: HTMLElement): string {
-  const link = node.querySelector('a[href*="/status/"]');
-  const m = link?.getAttribute('href')?.match(/status\/(\d+)/);
+  // The tweet's canonical permalink is the status link wrapping its timestamp.
+  // Prefer it over the first `/status/` anchor, which may point at an embedded
+  // quote tweet or reply link and can reorder between renders — an unstable id
+  // would defeat the verdict cache and cause the post to be reclassified.
+  const timeAnchor = node.querySelector('a[href*="/status/"] time')?.parentElement;
+  const href =
+    timeAnchor?.getAttribute('href') ??
+    node.querySelector('a[href*="/status/"]')?.getAttribute('href') ??
+    '';
+  const m = href.match(/status\/(\d+)/);
   return m ? m[1] : '';
 }
 
