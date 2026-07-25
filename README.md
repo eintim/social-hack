@@ -2,14 +2,13 @@
 
 **Built at the Cursor Hackathon, Stuttgart — July 2026**
 
-Feed Filter is a Chrome extension that reads your X (Twitter) timeline as it renders and hides the posts you don't want to see — ragebait, ads, engagement bait, whole topics, specific accounts — using an LLM that runs **entirely on your device**, with zero servers, zero API costs, and zero data leaving the browser. Point it at an OpenAI-compatible endpoint instead if you want a stronger model.
+Feed Filter is a Chrome extension that overrides X's ranking algorithm with your own rules: it reads the timeline as it renders and hides everything you don't want — ragebait, ads, engagement bait, whole topics, specific accounts — so the feed only shows what's relevant to you. The LLM judging each post runs **entirely on your device**, with zero servers, zero API costs, and zero data leaving the browser. Point it at an OpenAI-compatible endpoint instead if you want a stronger model.
 
 ![The X timeline with Feed Filter active — matched posts collapse in place, kept posts get a keep/hide badge and an engagement-rate chip](docs/screenshots/x-timeline.png)
 
 ## Table of contents
 
-- [The problem](#the-problem)
-- [The solution](#the-solution)
+- [Why](#why)
 - [Features](#features)
 - [How it works](#how-it-works)
 - [Getting started](#getting-started)
@@ -17,46 +16,22 @@ Feed Filter is a Chrome extension that reads your X (Twitter) timeline as it ren
 - [Tech stack](#tech-stack)
 - [Limitations & roadmap](#limitations--roadmap)
 
-## The problem
+## Why
 
-If you create content, X is a research tool, a distribution channel, and a networking tool all at once — which means you can't just log off. But the same timeline that shows you what's working in your niche also buries you in outrage bait, crypto shills, engagement-farming reply-guy threads, and ads dressed up as posts. Every minute spent scrolling past that is a minute not spent writing, filming, or replying to the people who actually matter to your audience.
+X's algorithm decides what you see, not you — and it optimizes for engagement, not for your time. If you create content, you can't just log off either: X is a research tool, a distribution channel, and a networking tool all at once. So you scroll past outrage bait, crypto shills, engagement-farming threads, and ads dressed up as posts to get to the handful of posts that actually matter.
 
-Existing "mute this word" tools are keyword-matching and miss anything phrased differently. Server-side moderation tools require you to hand your feed (and your account) to a third-party API. Neither lets you say, in plain language, *"hide AI hype threads"* or *"hide anything that's obviously an ad"* and have it actually work.
-
-## The solution
-
-Feed Filter sits in the browser, watches the timeline as X renders it, and asks a language model one question per post: *does this match anything you've told me to hide?* Matches collapse into a single flat line with a reason and a "Show" link — the rest of the thread goes with it, so a hidden reply doesn't leave orphaned context behind. Everything else stays exactly as X rendered it, with an optional engagement-rate badge so you can see what's actually resonating versus what's just loud.
-
-Because the classifier can run **on-device** (Chrome's built-in Gemini Nano), this works with no account, no API key, no per-request cost, and no post content ever leaving your machine. Flip a switch in the popup and the same pipeline runs against any OpenAI-compatible endpoint instead, for when you want a stronger model or don't have on-device AI available.
+"Mute this word" is keyword-matching and misses anything phrased differently. Server-side moderation hands your feed to a third-party API. Feed Filter takes the ranking decision back from the algorithm and gives it to you: say, in plain language, *"hide AI hype threads"* or *"hide anything that's obviously an ad,"* and a language model re-judges every post against your rules as the timeline renders — locally, on-device, with nothing sent anywhere. You define the feed; the algorithm just supplies the raw posts.
 
 ## Features
 
-### Topic & rule-based filtering
-Ten preset categories (AI, Tech, Gaming, Ads/promotions, Crypto/NFT, Politics, Rage/outrage bait, Engagement bait, Sports, Crime/violence) you toggle with one click, plus unlimited custom rules in plain language — `"AI hype threads"`, `"threads about layoffs"` — judged by the same model, no regex required.
-
-### Author blocking
-Deterministic, no LLM round-trip: block a handle once and every post from that account collapses instantly, forever.
-
-### Engagement-rate awareness
-Every post gets an (likes + replies + reposts) ÷ views badge. Posts at or above your threshold get a **Hot** badge — useful signal for a creator sizing up what's actually working. Optionally hide everything *below* a floor, deterministically, no model call needed.
-
-### Thread-aware hiding
-X renders self-threads as consecutive timeline cells. Hiding one post in a thread hides the whole thread — and late-arriving siblings (X virtualizes the timeline, so replies can stream in after the parent) inherit the hide instead of flashing back into view.
-
-### Two classifier backends, one interface
-- **On-device (default):** Chrome's built-in Gemini Nano via the Prompt API. Free, private, works offline once downloaded.
-- **API mode:** any OpenAI-compatible `/chat/completions` endpoint — bring your own key and model.
-
-Both paths share one system prompt builder, one JSON verdict schema, and one batching/caching engine — swapping providers is a toggle, not a rewrite.
-
-### Debug mode
-Every post gets a small badge — `✓ kept`, `✕ <reason>`, `⛔ blocked @handle`, `… classifying` — with confidence %, and a hover tooltip with the model's full reasoning. Built for demoing the "why" live.
-
-### Fail-open by design
-Classifier error, timeout, missing API key, model not downloaded yet — the post stays visible. The extension can only ever *hide less* than intended, never silently over-hide.
-
-### Popup control panel
-A tabbed settings panel (Topics / Rules / Authors / Engagement / Classifier) that fits without scrolling, with live status badges per tab (active filter counts, on-device model readiness, API connection state).
+- 🎯 **Topic & rule filters** — 10 one-click presets (AI, Crypto, Ragebait, Ads, …) plus unlimited plain-language custom rules
+- 🚫 **Author blocking** — block a handle once, gone forever, no LLM needed
+- 📊 **Engagement badges** — likes+replies+reposts ÷ views, with a **Hot** badge and an optional low-ER auto-hide
+- 🧵 **Thread-aware hiding** — hide one post, the whole thread (and late-arriving replies) goes with it
+- 🔌 **On-device or API** — Chrome's built-in Gemini Nano by default, or swap in any OpenAI-compatible endpoint
+- 🐛 **Debug mode** — live per-post verdict badges with confidence % and full model reasoning on hover
+- 🛡️ **Fail-open** — any classifier error just leaves the post visible, never silently over-hides
+- 🎛️ **Tabbed popup** — Topics / Rules / Authors / Engagement / Classifier, with live status badges
 
 | Topics | Engagement | Classifier |
 |---|---|---|
