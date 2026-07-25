@@ -59,10 +59,10 @@ body {
 
 .app {
   position: relative;
-  width: 352px;
-  max-height: 580px;
-  overflow-y: auto;
-  padding: 20px 18px 22px;
+  width: 640px;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px 18px;
   box-sizing: border-box;
   font-family: var(--font-body);
   font-size: 13.5px;
@@ -116,10 +116,10 @@ body {
 /* —— Brand header —— */
 .header {
   display: flex;
+  flex: none;
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 6px;
 }
 
 .brand {
@@ -148,8 +148,8 @@ body {
 }
 
 .tagline {
-  margin: 10px 0 0;
-  max-width: 22ch;
+  flex: none;
+  margin: 8px 0 0;
   font-size: 13px;
   line-height: 1.35;
   color: var(--muted);
@@ -248,38 +248,133 @@ body {
   text-align: right;
 }
 
-/* Sections */
-section {
-  margin-top: 22px;
-}
-
-section h2 {
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-  margin: 0 0 10px;
-}
-
-.section-head {
+/* —— Control shell: tab rail + panel, fixed height, nothing scrolls at the page level —— */
+.shell {
   display: flex;
-  align-items: baseline;
+  align-items: stretch;
+  gap: 20px;
+  margin-top: 16px;
+}
+
+.rail {
+  flex: none;
+  width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-right: 16px;
+  border-right: 1.5px solid var(--border);
+}
+
+.navtab {
+  position: relative;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 10px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0 2px 2px 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: color var(--ease), border-color var(--ease), background var(--ease);
 }
 
-.section-head h2 {
-  margin: 0;
+.navtab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--redact);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--ease-out);
+  z-index: 0;
 }
 
-.section-count {
+.navtab-label,
+.navtab-count,
+.navtab-dot {
+  position: relative;
+  z-index: 1;
+}
+
+.navtab:hover {
+  color: var(--ink);
+}
+
+.navtab:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.navtab-on {
+  color: var(--redact-ink);
+  border-left-color: var(--signal);
+}
+
+.navtab-on::before {
+  transform: scaleX(1);
+}
+
+.navtab-on:hover {
+  color: var(--redact-ink);
+}
+
+.navtab-count {
   font-size: 11px;
   font-weight: 600;
-  color: var(--muted);
+  color: inherit;
+  opacity: 0.75;
   font-variant-numeric: tabular-nums;
+}
+
+.navtab-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.panel {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+}
+
+.panel-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-head {
+  flex: none;
+  margin-bottom: 14px;
+}
+
+.panel-head h2 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+
+.panel-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 /* —— Signature: redaction chips —— */
@@ -489,6 +584,24 @@ section h2 {
   margin: 10px 0 0;
 }
 
+/* Rules/authors lists grow with content up to a cap, then scroll only the
+   list itself so the popup around it never does. */
+.list-scroll {
+  max-height: 216px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.list-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.list-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
 .list li {
   display: flex;
   align-items: center;
@@ -685,9 +798,13 @@ section h2 {
   color: var(--warn);
 }
 
-.model-section {
-  margin-top: 20px;
-  padding-top: 18px;
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1.5px solid var(--border);
 }
 
@@ -738,7 +855,7 @@ section h2 {
   color: var(--ink);
 }
 
-.footer-toggle-hint {
+.footer-hint {
   font-size: 11.5px;
   color: var(--muted);
   line-height: 1.3;
