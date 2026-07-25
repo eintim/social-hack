@@ -16,8 +16,8 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "@fontsource/fraunces": "^5.3.0",
-    "@fontsource/source-sans-3": "^5.3.0",
+    "@fontsource/bricolage-grotesque": "^5.3.0",
+    "@fontsource/public-sans": "^5.3.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

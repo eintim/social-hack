@@ -1,10 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import '@fontsource/fraunces/500.css';
-import '@fontsource/fraunces/600.css';
-import '@fontsource/source-sans-3/400.css';
-import '@fontsource/source-sans-3/500.css';
-import '@fontsource/source-sans-3/600.css';
+import '@fontsource/bricolage-grotesque/600.css';
+import '@fontsource/bricolage-grotesque/700.css';
+import '@fontsource/bricolage-grotesque/800.css';
+import '@fontsource/public-sans/400.css';
+import '@fontsource/public-sans/500.css';
+import '@fontsource/public-sans/600.css';
 import App from './App.tsx';
 import './style.css';
 

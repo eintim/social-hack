@@ -203,15 +203,19 @@ function App() {
     setNewAuthor('');
   }
 
-  if (!config) return <div className="app">Loading…</div>;
+  if (!config) return <div className="app app-loading">Loading…</div>;
 
   const provider = config.provider ?? 'on-device';
+  const activeCats = CATEGORIES.filter((c) => config.categories[c.id]).length;
 
   return (
-    <div className="app">
+    <div className={`app${config.enabled ? ' app-live' : ''}`}>
       <header className="header">
-        <h1>Feed Filter</h1>
-        <label className="switch">
+        <div className="brand">
+          <span className="brand-mark">X · local filter</span>
+          <h1>Feed Filter</h1>
+        </div>
+        <label className="switch header-switch">
           <input
             type="checkbox"
             checked={config.enabled}
@@ -221,30 +225,37 @@ function App() {
           <span className="switch-track" aria-hidden="true">
             <span className="switch-thumb" />
           </span>
-          <span className="switch-label">{config.enabled ? 'On' : 'Off'}</span>
+          <span className="switch-label">{config.enabled ? 'Live' : 'Off'}</span>
         </label>
       </header>
+      <p className="tagline">
+        {config.enabled
+          ? 'Cutting noise from your timeline as you scroll.'
+          : 'Turn on to start cutting noise from your timeline.'}
+      </p>
 
       <section>
-        <h2>Hide from feed</h2>
-        <div className="tiles">
+        <div className="section-head">
+          <h2>Redact topics</h2>
+          <span className="section-count">
+            {activeCats}/{CATEGORIES.length}
+          </span>
+        </div>
+        <div className="chips" role="group" aria-label="Topics to hide">
           {CATEGORIES.map((cat) => {
             const active = !!config.categories[cat.id];
             return (
               <button
                 key={cat.id}
                 type="button"
-                className={active ? 'tile tile-on' : 'tile'}
+                className={active ? 'chip chip-on' : 'chip'}
                 title={cat.description}
                 aria-pressed={active}
                 onClick={() =>
                   update({ categories: { ...config.categories, [cat.id]: !active } })
                 }
               >
-                <span className="tile-emoji" aria-hidden="true">
-                  {cat.emoji}
-                </span>
-                <span className="tile-label">{cat.label}</span>
+                <span className="chip-label">{cat.label}</span>
               </button>
             );
           })}
@@ -256,7 +267,7 @@ function App() {
         <div className="row">
           <input
             value={newRule}
-            placeholder="e.g. hide AI hype threads"
+            placeholder="e.g. AI hype threads"
             onChange={(e) => setNewRule(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addRule()}
           />
@@ -266,7 +277,7 @@ function App() {
         </div>
         <ul className="list">
           {config.rules.map((rule, i) => (
-            <li key={i}>
+            <li key={`${rule}-${i}`}>
               <span>{rule}</span>
               <button
                 type="button"
@@ -279,7 +290,7 @@ function App() {
             </li>
           ))}
           {config.rules.length === 0 && (
-            <li className="empty">Add a rule to hide posts that match it.</li>
+            <li className="empty">Write a rule in plain language to hide matching posts.</li>
           )}
         </ul>
       </section>
@@ -299,7 +310,7 @@ function App() {
         </div>
         <ul className="list">
           {config.blockedAuthors.map((h, i) => (
-            <li key={i}>
+            <li key={h}>
               <span>@{h}</span>
               <button
                 type="button"
@@ -314,35 +325,29 @@ function App() {
             </li>
           ))}
           {config.blockedAuthors.length === 0 && (
-            <li className="empty">Block an author to hide their posts.</li>
+            <li className="empty">Add a handle to hide every post from that account.</li>
           )}
         </ul>
       </section>
 
       <section className="model-section">
-        <h2>Model</h2>
-        <div className="tiles">
+        <h2>Classifier</h2>
+        <div className="segment" role="group" aria-label="Classifier backend">
           <button
             type="button"
-            className={provider === 'on-device' ? 'tile tile-on' : 'tile'}
+            className={provider === 'on-device' ? 'segment-btn segment-on' : 'segment-btn'}
             aria-pressed={provider === 'on-device'}
             onClick={() => setProvider('on-device')}
           >
-            <span className="tile-emoji" aria-hidden="true">
-              💻
-            </span>
-            <span className="tile-label">On-device</span>
+            On-device
           </button>
           <button
             type="button"
-            className={provider === 'openai' ? 'tile tile-on' : 'tile'}
+            className={provider === 'openai' ? 'segment-btn segment-on' : 'segment-btn'}
             aria-pressed={provider === 'openai'}
             onClick={() => setProvider('openai')}
           >
-            <span className="tile-emoji" aria-hidden="true">
-              ☁️
-            </span>
-            <span className="tile-label">API</span>
+            API
           </button>
         </div>
 
@@ -421,7 +426,7 @@ function App() {
           </span>
           <span className="switch-label">Debug labels</span>
         </label>
-        <span className="footer-toggle-hint">Show a per-post outcome badge on the feed</span>
+        <span className="footer-toggle-hint">Stamp each post with keep / hide</span>
       </div>
 
       <p className="hint">Reload an open X tab to re-scan posts already on screen.</p>
