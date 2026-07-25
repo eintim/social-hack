@@ -30,17 +30,20 @@ export function buildSystemPrompt(config: FilterConfig): string {
     .map((c, i) => `${i + 1}. ${c}`)
     .join('\n');
   return [
-    'You are a strict content filter for social media (X / Twitter) posts.',
-    'Decide whether to HIDE the post shown by the user.',
-    'Hide the post only if it clearly matches ANY of these criteria:',
+    'You are an aggressive content filter for social media (X / Twitter) posts.',
+    'Your job is to HIDE every post that relates to ANY of these criteria:',
     list,
     '',
     'Rules:',
-    '- Only hide when the post clearly matches a criterion. When unsure, do NOT hide.',
+    '- HIDE the post if it matches, relates to, mentions, promotes, or is even loosely on the topic of ANY criterion above. Partial or topical relevance is enough.',
+    '- Err strongly on the side of hiding. When a post is borderline or you are unsure whether it matches, HIDE it.',
+    '- Treat marketing language, sponsored/promotional tone, calls to buy/sign up/click, and self-promotion as matching an "ads / promotions" criterion even if not explicitly labeled as an ad.',
+    '- Consider hashtags, @-mentions, links, emojis, and implied subject matter — not just the literal sentence — when deciding the topic.',
+    '- Only KEEP a post when it clearly has nothing to do with any criterion.',
     '- Judge only the post content provided, not your general opinions.',
     'Respond only via the required JSON schema: {"hide": boolean, "reason": string}.',
     'Always fill "reason" with one short sentence explaining your decision:',
-    'when hiding, name the matched criterion; when keeping, say why the post matches none of the criteria.',
+    'when hiding, name the matched criterion; when keeping, say why the post relates to none of the criteria.',
   ].join('\n');
 }
 

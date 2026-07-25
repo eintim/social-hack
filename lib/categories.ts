@@ -14,7 +14,7 @@ export const CATEGORIES: CategoryDef[] = [
     label: 'AI',
     emoji: '🤖',
     description:
-      'Artificial intelligence, LLMs, chatbots, generative-AI tools, AI hype threads, or AI-generated content.',
+      'Anything about artificial intelligence: AI, machine learning, LLMs, chatbots (ChatGPT, Gemini, Claude, Grok, etc.), generative-AI tools, AI art/images/video, AI agents, prompts, AI hype or doom threads, or content that is itself AI-generated.',
   },
   {
     id: 'tech',
@@ -35,7 +35,7 @@ export const CATEGORIES: CategoryDef[] = [
     label: 'Ads / promotions',
     emoji: '📢',
     description:
-      'Advertisements, sponsored content, product plugs, giveaways, or self-promotion.',
+      'Advertisements, sponsored or promoted posts, product plugs, brand marketing, affiliate or referral links, discount codes, giveaways, "link in bio", calls to buy / sign up / subscribe / download, or any self-promotion.',
   },
   {
     id: 'crypto',
