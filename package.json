@@ -5,8 +5,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "wxt",
+    "dev": "node scripts/seed-chrome-ai-flags.mjs && wxt",
     "dev:firefox": "wxt -b firefox",
+    "seed:chrome-ai": "node scripts/seed-chrome-ai-flags.mjs",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
     "zip": "wxt zip",
@@ -15,6 +16,8 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@fontsource/fraunces": "^5.3.0",
+    "@fontsource/source-sans-3": "^5.3.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
